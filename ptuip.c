@@ -192,7 +192,7 @@ void TCP_Init(void)
 
     TCPInitConnections();
     /* Currently the PTU is the only server socket */
-    TCPCreateServerSocket (SERVER_PORT_NUM, TCPServerPTUCallback, TCPPtuInsertClientInfo, TCPPtuRemoveClientInfo, TRUE);
+    TCPCreateServerSocket (SERVER_PORT_NUM, TCPServerPTUCallback, TCPPtuInsertClientInfo, TCPPtuRemoveClientInfo, FALSE);
 
     for (i = 0; i < MAX_CLIENTS_PER_SERVER; i++)
     {
@@ -262,7 +262,7 @@ void TCP_Main(void)
          */
     	TCPCloseActiveSocketsOnTimeout ();
     }
-    else if ( (activity < 0) && (errno != EINTR) )
+    else if (activity < 0)
     {
     	/* an error has occurred... do nothing. Hopefully system can recover */
         os_io_printf("TCP ERROR: select error\n");
@@ -468,7 +468,7 @@ static void TCPInitConnections( void )
 	mServers = (ServerSocketInfo *)calloc (mMaxNumServerSockets, sizeof(ServerSocketInfo));
 
 	/* Set the inactivity time for the select function */
-	TCPSetBlockingTime (MAX_INACTIVE_SOCKET_TIME_SECONDS, 0);
+	TCPSetBlockingTime (0, 1000);
 }
 
 /**********************************************************************

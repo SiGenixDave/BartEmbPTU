@@ -159,6 +159,8 @@ void PTUMain(void)
   /* Call GetPTUKey to see if a character has been received at the */
   /* serial port.                                                  */
   get_char_status = GetPTUChar();
+
+  TCP_Main();
 }
 
 /****************************************************************************
