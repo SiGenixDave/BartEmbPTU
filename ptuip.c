@@ -69,7 +69,7 @@ extern UINT_16 ComDevice;
 #define MAX_CLIENTS_PER_SERVER				10
 #define MAX_INITIAL_SERVER_SOCKETS			3
 #define TCP_RX_BUFFER_SIZE					4096
-#define MAX_INACTIVE_SOCKET_TIME_SECONDS	(10 * 60)
+#define INACTIVITY_TIMEOUT_MS				(1000UL * 60UL * 10UL)
 /*******************************************************************/
 
 /*******************************************************************/
@@ -139,6 +139,7 @@ static ServerSocketInfo *mServers;
 static fd_set mReadfds;
 static struct timeval mTimer;
 static struct timeval *mTimerPtr;
+static UINT_32 mInactivityTimer;
 /*******************************************************************/
 
 /*******************************************************************/
@@ -158,6 +159,8 @@ static INT_16 TCPPtuGetDataPacket(Header_t *aDataPacket, char *aBuffer, int aBuf
 
 static void TCPPtuInsertClientInfo (int aClientSocket);
 static void TCPPtuRemoveClientInfo (int aClientSocket);
+static UINT_16 TCPUpdateInactivityTimer (UINT_32 aElapsedTimeMs);
+static void TCPResetInactivityTimer (void);
 
 
 /*******************************************************************/
@@ -192,7 +195,8 @@ void TCP_Init(void)
 
     TCPInitConnections();
     /* Currently the PTU is the only server socket */
-    TCPCreateServerSocket (SERVER_PORT_NUM, TCPServerPTUCallback, TCPPtuInsertClientInfo, TCPPtuRemoveClientInfo, FALSE);
+    TCPCreateServerSocket (SERVER_PORT_NUM, TCPServerPTUCallback, TCPPtuInsertClientInfo,
+    										TCPPtuRemoveClientInfo, TRUE);
 
     for (i = 0; i < MAX_CLIENTS_PER_SERVER; i++)
     {
@@ -241,6 +245,8 @@ void TCP_Init(void)
 void TCP_Main(void)
 {
     INT_16 activity, maxSd;
+	UINT_8 timeoutOccurred = FALSE;
+
 
 	maxSd = TCPPopulateSocketDescriptorList ();
 
@@ -249,7 +255,7 @@ void TCP_Main(void)
     /* wait for an activity on any of the sockets, if mTimerPtr is NULL; wait indefinitely for
      * activity on the registered sockets. Wakes up only when a new client is trying to connect
      * or an existing client has sent a request. */
-    activity = select (maxSd + 1, &mReadfds, NULL, NULL, mTimerPtr);
+    activity = os_ip_select (maxSd + 1, &mReadfds, NULL, NULL, mTimerPtr);
 
     debugPrintf ("Activity = %d, mTimer.sec = %ld, mTimer.usec = %ld, err = %d\n",
     		   activity, mTimer.tv_sec, mTimer.tv_usec, errno);
@@ -257,10 +263,15 @@ void TCP_Main(void)
 
     if (activity == 0)
     {
-        /* a timeout has occurred (no socket activity) on all of the active sockets (if any are present)
-         * close and free all of the
-         */
-    	TCPCloseActiveSocketsOnTimeout ();
+    	timeoutOccurred = TCPUpdateInactivityTimer (50);
+    	if (timeoutOccurred == TRUE)
+    	{
+    		os_io_printf("TCP INFO: Inactivity timer expired\n");
+    		/* a timeout has occurred (no socket activity) on all of the active sockets (if any are present)
+    		 * close and free all of the
+    		 */
+    		TCPCloseActiveSocketsOnTimeout ();
+    	}
     }
     else if (activity < 0)
     {
@@ -269,6 +280,7 @@ void TCP_Main(void)
     }
     else
     {
+    	TCPResetInactivityTimer ();
     	/* Scan for any new clients */
     	TCPScanForNewConnections ();
     	/* Service existing client connection(s) */
@@ -468,7 +480,7 @@ static void TCPInitConnections( void )
 	mServers = (ServerSocketInfo *)calloc (mMaxNumServerSockets, sizeof(ServerSocketInfo));
 
 	/* Set the inactivity time for the select function */
-	TCPSetBlockingTime (0, 1000);
+	TCPSetBlockingTime (0, 0);
 }
 
 /**********************************************************************
@@ -1135,6 +1147,77 @@ static INT_16 TCPPtuGetDataPacket(Header_t *aDataPacket, char *aBuffer, int aBuf
 	}
 
 	return TCP_MSG_GOOD;
+}
+
+/**********************************************************************
+*
+*
+*   Module:		TCPUpdateInactivityTimer
+*
+*   Abstract:   Updates the inactivity timer
+*
+*   Globals:	NONE
+*
+*   Parameters:	aElapsedTimeMs - amount of time that has elapsed since previous call
+*
+*   IN:			NONE
+*
+* Return Value : TRUE if timer has elapsed; FALSE otherwise
+*
+*
+*
+* Functional Description :  TODO
+*
+*
+*   Date & Author:	11/02/15 - Dave Smail
+*   Description:    Initial Release which includes overhauled TCP/IP
+*					implementation for PTU
+*
+*****************************************************************************/
+static UINT_16 TCPUpdateInactivityTimer (UINT_32 aElapsedTimeMs)
+{
+	mInactivityTimer += aElapsedTimeMs;
+
+	/* Determine if the amount of inactivity time has exceeded the allowed
+	 * amount.
+	 */
+	if (mInactivityTimer >= INACTIVITY_TIMEOUT_MS)
+	{
+		TCPResetInactivityTimer ();
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+/**********************************************************************
+*
+*
+*   Module:		TCPResetInactivityTimer
+*
+*   Abstract:   TODO
+*
+*   Globals:	NONE
+*
+*   Parameters:	NONE
+*
+*   IN:			NONE
+*
+* Return Value : NONE
+*
+*
+*
+* Functional Description :  TODO
+*
+*
+*   Date & Author:	11/02/15 - Dave Smail
+*   Description:    Initial Release which includes overhauled TCP/IP
+*					implementation for PTU
+*
+*****************************************************************************/
+static void TCPResetInactivityTimer (void)
+{
+	mInactivityTimer = 0;
 }
 
 #ifdef __cplusplus
