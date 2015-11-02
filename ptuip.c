@@ -1166,7 +1166,14 @@ static INT_16 TCPPtuGetDataPacket(Header_t *aDataPacket, char *aBuffer, int aBuf
 *
 *
 *
-* Functional Description :  TODO
+* Functional Description :  This function monitors the amount of time there has
+* 							been no activity on any TCP connection. If the timer
+* 							expires, the function indicates the state by returning
+* 							TRUE. Otherwise, it returns FALSE. Normally, the
+* 							os_ip_select() can determine if a timeout occurs, but since
+* 							the serial and TCP are co-mingled, this function is required
+* 							because os_ip_select blocks until activity occurs which would preclude
+* 							incoming serial chars from being processed.
 *
 *
 *   Date & Author:	11/02/15 - Dave Smail
@@ -1195,7 +1202,7 @@ static UINT_16 TCPUpdateInactivityTimer (UINT_32 aElapsedTimeMs)
 *
 *   Module:		TCPResetInactivityTimer
 *
-*   Abstract:   TODO
+*   Abstract:   Resets the inactivity timer
 *
 *   Globals:	NONE
 *
@@ -1207,7 +1214,9 @@ static UINT_16 TCPUpdateInactivityTimer (UINT_32 aElapsedTimeMs)
 *
 *
 *
-* Functional Description :  TODO
+* Functional Description :  This function resets the inactivity timer. It is called
+* 							when the software detects TCP activity on any TCP connection
+* 							Including the creation of a new TCP connection.
 *
 *
 *   Date & Author:	11/02/15 - Dave Smail
